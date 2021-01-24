@@ -1,39 +1,31 @@
-{-# LANGUAGE BlockArguments #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE BlockArguments        #-}
+{-# LANGUAGE DeriveGeneric         #-}
+{-# LANGUAGE DerivingVia           #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE InstanceSigs          #-}
+{-# LANGUAGE MonoLocalBinds        #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE NoImplicitPrelude     #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE PatternSynonyms       #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 
-import Colog
-  ( HasLog (..),
-    LogAction,
-    Message,
-    Msg (..),
-    WithLog,
-    cmap,
-    log,
-    richMessageAction,
-    withLog,
-    pattern D,
-    pattern I,
-  )
+import Colog (HasLog (..), LogAction, Message, Msg (..), WithLog, cmap, liftLogAction, log,
+              pattern D, pattern I, richMessageAction, withLog)
 import qualified Data.Text.Lazy as TL
 import Relude
 import qualified Web.Scotty.Internal.Types as Scotty
 import qualified Web.Scotty.Trans as Scotty
 
-data AppEnv m = AppEnv {logAction :: !(LogAction m Message)}
+data AppEnv m = AppEnv {logAction :: !(LogAction (Scotty.ActionT TL.Text m) Message)}
 
-instance HasLog (AppEnv m) Message m where
+instance HasLog (AppEnv m) Message (Scotty.ActionT TL.Text m) where
+  getLogAction :: AppEnv m -> LogAction (Scotty.ActionT TL.Text m) Message
   getLogAction = logAction
   {-# INLINE getLogAction #-}
 
+  setLogAction :: LogAction (Scotty.ActionT TL.Text m) Message -> AppEnv m -> AppEnv m
   setLogAction newLogAction env = env {logAction = newLogAction}
   {-# INLINE setLogAction #-}
 
@@ -47,7 +39,9 @@ newtype App a = App {unApp :: AppEnv App -> IO a}
     )
     via ReaderT (AppEnv App) IO
 
-handler :: (WithLog (AppEnv App) Message m, MonadIO m) => Scotty.ActionT TL.Text m ()
+handler
+    :: (WithLog (AppEnv m) Message (Scotty.ActionT TL.Text m), MonadIO m)
+    => Scotty.ActionT TL.Text m ()
 handler = withLog (cmap (\(msg :: Message) -> msg {msgText = "foo"})) $ do
   log I "Hi"
   Scotty.html $ mconcat ["<h1>Scotty, beam me up!</h1>"]
